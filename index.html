@@ -8,17 +8,34 @@
     display: flex;
     flex-direction: column;
     align-items: center;
+    margin: 0;
+    padding: 20px;
+    transition: background-color 0.3s, color 0.3s;
+  }
+
+  /* Light and Dark Mode Styles */
+  body.light-mode {
+    background-color: #fff;
+    color: #000;
+  }
+  body.dark-mode {
+    background-color: #222;
+    color: #fff;
   }
 
   .container {
-    border: 4px solid #333; /* Leader border */
+    border: 4px solid #333;
     padding: 20px;
     margin-top: 20px;
     display: flex;
     flex-direction: column;
     align-items: center;
+    width: 600px;
+    max-width: 90%;
+    transition: background-color 0.3s, color 0.3s;
   }
 
+  /* Board styles */
   .board {
     display: grid;
     grid-template-columns: repeat(8, 50px);
@@ -33,61 +50,433 @@
     justify-content: center;
     align-items: center;
     font-size: 24px;
+    cursor: pointer;
   }
-
   .white {
     background-color: #f0d9b5;
   }
-
   .black {
     background-color: #b58863;
   }
-
-  .piece {
-    cursor: grab;
+  /* Highlight for possible moves */
+  .possible-move {
+    outline: 3px solid green;
+  }
+  /* Selected piece highlight (optional) */
+  .selected {
+    outline: 3px solid blue;
   }
 
+  /* Buttons and controls */
   .controls {
     margin-top: 20px;
     display: flex;
-    gap: 20px;
+    gap: 10px;
+    flex-wrap: wrap;
     align-items: center;
   }
+  button {
+    padding: 8px 12px;
+    cursor: pointer;
+  }
 
-  #timer {
+  /* Modal styles for rules popup */
+  .modal {
+    display: none; /* Hidden by default */
+    position: fixed;
+    z-index: 999;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.5);
+  }
+  .modal-content {
+    background-color: #fefefe;
+    margin: 10% auto;
+    padding: 20px;
+    border-radius: 8px;
+    width: 80%;
+    max-width: 600px;
+    position: relative;
+  }
+  .close-btn {
+    position: absolute;
+    right: 10px;
+    top: 10px;
     font-size: 1.2em;
+    cursor: pointer;
+    border: none;
+    background: none;
   }
 </style>
 </head>
-<body>
-  <div class="container">
-    <h1>Nigger Chess</h1>
+<body class="light-mode">
 
-    <div class="controls">
-      <div>
-        <label for="gameMode">Game Mode:</label>
-        <select id="gameMode">
-          <option value="twoPlayer">Two Player</option>
-          <option value="ai">Play with AI</option>
-        </select>
-      </div>
-      <div id="playerTurn">Turn: White</div>
-      <div id="timer">Time: 00:00</div>
-      <button id="resetButton">Reset Game</button>
-    </div>
+<div class="container">
+  <h1>Nerd Chess</h1>
 
-    <div class="board" id="chessBoard">
-      </div>
+  <div class="controls">
+    <button id="rulesBtn">Show Rules</button>
+    <button id="modeToggle">Dark Mode</button>
+    <button id="resetButton">Reset Game</button>
   </div>
 
-  <script>
-    const boardElement = document.getElementById('chessBoard');
-    const playerTurnElement = document.getElementById('playerTurn');
-    const timerElement = document.getElementById('timer');
-    const resetButton = document.getElementById('resetButton');
-    const gameModeSelect = document.getElementById('gameMode');
+  <!-- The chessboard -->
+  <div class="board" id="chessBoard"></div>
+</div>
 
-    let board = [
+<!-- Rules Modal -->
+<div id="rulesModal" class="modal">
+  <div class="modal-content">
+    <button class="close-btn" id="closeRules">&times;</button>
+    <h2>Chess Rules</h2>
+    <ul>
+      <li>Each player takes turns moving one piece.</li>
+      <li>Pieces move according to their types.</li>
+      <li>The goal is to checkmate the opponent's king.</li>
+      <li>Capture opponent's pieces by moving onto their squares.</li>
+      <li>Special moves like castling and en passant are optional here.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+  // Get DOM elements
+  const boardElement = document.getElementById('chessBoard');
+  const rulesBtn = document.getElementById('rulesBtn');
+  const closeRulesBtn = document.getElementById('closeRules');
+  const rulesModal = document.getElementById('rulesModal');
+  const modeToggleBtn = document.getElementById('modeToggle');
+  const resetButton = document.getElementById('resetButton');
+  const body = document.body;
+
+  // Initialize board state
+  let board = [
+    ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
+    ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
+    ['', '', '', '', '', '', '', ''],
+    ['', '', '', '', '', '', '', ''],
+    ['', '', '', '', '', '', '', ''],
+    ['', '', '', '', '', '', '', ''],
+    ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
+    ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R']
+  ];
+
+  let currentPlayer = 'white'; // 'white' or 'black'
+  let selectedPiece = null; // {row, col, piece, element}
+  let possibleMoves = [];
+  let isWhiteTurn = true; // For toggling turns
+
+  // Generate board
+  function generateBoard() {
+    boardElement.innerHTML = '';
+    for (let i = 0; i < 8; i++) {
+      for (let j = 0; j < 8; j++) {
+        const square = document.createElement('div');
+        square.className = 'square ' + ((i + j) % 2 === 0 ? 'white' : 'black');
+        square.dataset.row = i;
+        square.dataset.col = j;
+
+        // If there's a piece, create a div for it
+        const piece = board[i][j];
+        if (piece) {
+          const pieceDiv = document.createElement('div');
+          pieceDiv.className = 'piece';
+          pieceDiv.textContent = getPieceUnicode(piece);
+          pieceDiv.dataset.piece = piece;
+          // Add click to select piece
+          pieceDiv.addEventListener('mousedown', (e) => {
+            e.stopPropagation(); // Prevent square's event
+            selectPiece(e, i, j, piece, pieceDiv);
+          });
+          square.appendChild(pieceDiv);
+        }
+
+        // Add click event to move or select
+        square.addEventListener('click', () => handleSquareClick(i, j));
+        boardElement.appendChild(square);
+      }
+    }
+  }
+
+  // Unicode representation
+  function getPieceUnicode(piece) {
+    switch (piece) {
+      case 'r': return '♜';
+      case 'n': return '♞';
+      case 'b': return '♝';
+      case 'q': return '♛';
+      case 'k': return '♚';
+      case 'p': return '♟';
+      case 'R': return '♖';
+      case 'N': return '♘';
+      case 'B': return '♗';
+      case 'Q': return '♕';
+      case 'K': return '♔';
+      case 'P': return '♙';
+      default: return '';
+    }
+  }
+
+  // Select a piece
+  function selectPiece(e, row, col, piece, element) {
+    // Only select if it's current player's turn
+    if ((currentPlayer === 'white' && piece === piece.toUpperCase()) ||
+        (currentPlayer === 'black' && piece === piece.toLowerCase())) {
+      // Deselect previous
+      clearHighlights();
+      selectedPiece = { row, col, piece, element };
+      highlightSelected();
+      highlightPossibleMoves(row, col, piece);
+    }
+  }
+
+  // Handle square click for moving
+  function handleSquareClick(row, col) {
+    if (selectedPiece) {
+      // Check if clicked square is a valid move
+      const moveIsValid = possibleMoves.some(m => m.row === row && m.col === col);
+      if (moveIsValid) {
+        // Move piece
+        board[row][col] = selectedPiece.piece;
+        board[selectedPiece.row][selectedPiece.col] = '';
+        // After move, switch turn
+        switchPlayer();
+        // Reset selection
+        clearHighlights();
+        selectedPiece = null;
+        generateBoard();
+      } else if (board[row][col] !== '') {
+        // If clicked on another piece, select it (if current player's)
+        const piece = board[row][col];
+        if ((currentPlayer === 'white' && piece === piece.toUpperCase()) ||
+            (currentPlayer === 'black' && piece === piece.toLowerCase())) {
+          // Select new piece
+          clearHighlights();
+          selectedPiece = { row, col, piece, element: null };
+          highlightSelected();
+          highlightPossibleMoves(row, col, piece);
+        } else {
+          // Clicked on opponent's piece or invalid, clear selection
+          clearHighlights();
+          selectedPiece = null;
+        }
+      } else {
+        // Clicked on empty square that is not a valid move
+        clearHighlights();
+        selectedPiece = null;
+      }
+    }
+  }
+
+  // Highlight functions
+  function highlightSelected() {
+    if (selectedPiece && selectedPiece.element) {
+      selectedPiece.element.classList.add('selected');
+    }
+  }
+
+  function clearHighlights() {
+    // Remove possible move highlights
+    document.querySelectorAll('.possible-move').forEach(sq => sq.classList.remove('possible-move'));
+    // Remove selected highlight
+    document.querySelectorAll('.selected').forEach(el => el.classList.remove('selected'));
+  }
+
+  function highlightPossibleMoves(row, col, piece) {
+    const moves = getPossibleMoves(row, col, piece);
+    possibleMoves = moves;
+    moves.forEach(move => {
+      const square = document.querySelector(`.square[data-row='${move.row}'][data-col='${move.col}']`);
+      if (square) {
+        square.classList.add('possible-move');
+      }
+    });
+  }
+
+  // Switch player
+  function switchPlayer() {
+    currentPlayer = currentPlayer === 'white' ? 'black' : 'white';
+  }
+
+  // Get possible moves (simplified version, no check for check/checkmate)
+  function getPossibleMoves(row, col, piece) {
+    const moves = [];
+    const isWhite = piece === piece.toUpperCase();
+    const directions = {
+      p: () => {
+        // Pawn moves
+        const dir = isWhite ? -1 : 1;
+        const startRow = isWhite ? 6 : 1;
+        const nextRow = row + dir;
+        if (isInBounds(nextRow, col) && board[nextRow][col] === '') {
+          moves.push({ row: nextRow, col });
+          if (row === startRow && board[nextRow + dir]?.[col] === '') {
+            moves.push({ row: nextRow + dir, col });
+          }
+        }
+        // Capture diagonally
+        for (let dc of [-1, 1]) {
+          const newCol = col + dc;
+          if (isInBounds(nextRow, newCol)) {
+            const targetPiece = board[nextRow][newCol];
+            if (targetPiece && isOpponent(piece, targetPiece)) {
+              moves.push({ row: nextRow, col: newCol });
+            }
+          }
+        }
+      },
+      r: () => {
+        // Rook
+        const deltas = [[1,0], [-1,0], [0,1], [0,-1]];
+        deltas.forEach(([dr, dc]) => {
+          let r = row + dr;
+          let c = col + dc;
+          while (isInBounds(r,c)) {
+            if (board[r][c]==='') {
+              moves.push({row:r, col:c});
+            } else {
+              if (isOpponent(piece, board[r][c])) {
+                moves.push({row:r, col:c});
+              }
+              break;
+            }
+            r += dr;
+            c += dc;
+          }
+        });
+      },
+      n: () => {
+        // Knight
+        const knightMoves = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+        knightMoves.forEach(([dr, dc]) => {
+          const r = row + dr;
+          const c = col + dc;
+          if (isInBounds(r,c) && (board[r][c]==='' || isOpponent(piece, board[r][c]))) {
+            moves.push({row:r, col:c});
+          }
+        });
+      },
+      b: () => {
+        // Bishop
+        const deltas = [[1,1],[1,-1],[-1,1],[-1,-1]];
+        deltas.forEach(([dr, dc]) => {
+          let r = row + dr;
+          let c = col + dc;
+          while (isInBounds(r,c)) {
+            if (board[r][c]==='') {
+              moves.push({row:r, col:c});
+            } else {
+              if (isOpponent(piece, board[r][c])) {
+                moves.push({row:r, col:c});
+              }
+              break;
+            }
+            r += dr;
+            c += dc;
+          }
+        });
+      },
+      q: () => {
+        // Queen (rook + bishop)
+        ['r','b'].forEach(pieceType => {
+          getPossibleMoves(row, col, pieceType);
+        });
+        // Combine rook and bishop logic
+        // For simplicity, reuse the same logic
+        // But better to call individual functions
+        // For brevity, just call rook and bishop logic again
+        // (In production, refactor for clarity)
+        // Here, for simplicity, include rook and bishop moves
+        const deltas = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+        deltas.forEach(([dr, dc]) => {
+          let r = row + dr;
+          let c = col + dc;
+          while (isInBounds(r,c)) {
+            if (board[r][c]==='') {
+              moves.push({row:r, col:c});
+            } else {
+              if (isOpponent(piece, board[r][c])) {
+                moves.push({row:r, col:c});
+              }
+              break;
+            }
+            r += dr;
+            c += dc;
+          }
+        });
+      },
+      k: () => {
+        // King
+        const kingMoves = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+        kingMoves.forEach(([dr, dc]) => {
+          const r = row + dr;
+          const c = col + dc;
+          if (isInBounds(r,c) && (board[r][c]==='' || isOpponent(piece, board[r][c]))) {
+            moves.push({row:r, col:c});
+          }
+        });
+      }
+    };
+
+    // Call the corresponding function
+    if (directions[piece.toLowerCase()]) {
+      directions[piece.toLowerCase()]();
+    }
+
+    return moves;
+  }
+
+  function isInBounds(r, c) {
+    return r >=0 && r<8 && c>=0 && c<8;
+  }
+
+  function isOpponent(p1, p2) {
+    if (!p2) return false;
+    const white = p1 === p1.toUpperCase();
+    const black = p1 === p1.toLowerCase();
+    const p2White = p2 === p2.toUpperCase();
+    const p2Black = p2 === p2.toLowerCase();
+    return (white && p2Black) || (black && p2White);
+  }
+
+  // Toggle between light/dark mode
+  modeToggleBtn.addEventListener('click', () => {
+    if (body.classList.contains('light-mode')) {
+      body.classList.remove('light-mode');
+      body.classList.add('dark-mode');
+      modeToggleBtn.textContent = 'Light Mode';
+    } else {
+      body.classList.remove('dark-mode');
+      body.classList.add('light-mode');
+      modeToggleBtn.textContent = 'Dark Mode';
+    }
+  });
+
+  // Show rules modal
+  document.getElementById('rulesBtn').addEventListener('click', () => {
+    rulesModal.style.display = 'block';
+  });
+  // Close rules modal
+  document.getElementById('closeRules').addEventListener('click', () => {
+    rulesModal.style.display = 'none';
+  });
+  // Close modal when clicking outside content
+  window.onclick = function(event) {
+    if (event.target == rulesModal) {
+      rulesModal.style.display = 'none';
+    }
+  };
+
+  // Reset game
+  resetButton.addEventListener('click', () => {
+    resetGame();
+  });
+
+  function resetGame() {
+    board = [
       ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
       ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
       ['', '', '', '', '', '', '', ''],
@@ -97,316 +486,15 @@
       ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
       ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R']
     ];
-
-    let currentPlayer = 'white';
-    let selectedPiece = null;
-    let possibleMoves = [];
-    let timerInterval;
-    let startTime;
-
-    function generateBoard() {
-      boardElement.innerHTML = '';
-      for (let i = 0; i < 8; i++) {
-        for (let j = 0; j < 8; j++) {
-          const square = document.createElement('div');
-          square.classList.add('square');
-          if ((i + j) % 2 === 0) {
-            square.classList.add('white');
-          } else {
-            square.classList.add('black');
-          }
-          square.dataset.row = i;
-          square.dataset.col = j;
-
-          const piece = board[i][j];
-          if (piece) {
-            const pieceElement = document.createElement('div');
-            pieceElement.classList.add('piece');
-            pieceElement.textContent = getPieceUnicode(piece);
-            pieceElement.dataset.piece = piece;
-            square.appendChild(pieceElement);
-
-            pieceElement.addEventListener('mousedown', selectPiece);
-          }
-
-          square.addEventListener('mouseup', movePiece);
-          boardElement.appendChild(square);
-        }
-      }
-    }
-
-    function getPieceUnicode(piece) {
-      switch (piece) {
-        case 'r': return '♖';
-        case 'n': return '♘';
-        case 'b': return '♗';
-        case 'q': return '♕';
-        case 'k': return '♔';
-        case 'p': return '♟';
-        case 'R': return '♜';
-        case 'N': return '♞';
-        case 'B': return '♝';
-        case 'Q': return '♛';
-        case 'K': return '♚';
-        case 'P': return '♟';
-        default: return '';
-      }
-    }
-
-    function selectPiece(event) {
-      if (gameModeSelect.value === 'ai' && currentPlayer === 'black') {
-        return; // AI's turn
-      }
-
-      const pieceElement = event.target;
-      const piece = pieceElement.dataset.piece;
-      const row = parseInt(pieceElement.parentNode.dataset.row);
-      const col = parseInt(pieceElement.parentNode.dataset.col);
-
-      if ((currentPlayer === 'white' && piece === piece.toUpperCase()) ||
-          (currentPlayer === 'black' && piece === piece.toLowerCase())) {
-        selectedPiece = { element: pieceElement, row, col, piece };
-        highlightPossibleMoves(row, col, piece);
-      } else {
-        selectedPiece = null;
-        removeHighlight();
-      }
-    }
-
-    function highlightPossibleMoves(row, col, piece) {
-      removeHighlight();
-      possibleMoves = getPossibleMoves(row, col, piece);
-      possibleMoves.forEach(move => {
-        const square = boardElement.children[move.row * 8 + move.col];
-        square.classList.add('possible-move');
-      });
-    }
-
-    function removeHighlight() {
-      const highlighted = document.querySelectorAll('.possible-move');
-      highlighted.forEach(square => square.classList.remove('possible-move'));
-      possibleMoves = [];
-    }
-
-    function movePiece(event) {
-      if (!selectedPiece) return;
-
-      const targetSquare = event.target.closest('.square');
-      if (!targetSquare) return;
-
-      const targetRow = parseInt(targetSquare.dataset.row);
-      const targetCol = parseInt(targetSquare.dataset.col);
-
-      const isValidMove = possibleMoves.some(move => move.row === targetRow && move.col === targetCol);
-
-      if (isValidMove) {
-        board[targetRow][targetCol] = selectedPiece.piece;
-        board[selectedPiece.row][selectedPiece.col] = '';
-        generateBoard();
-        switchPlayer();
-        removeHighlight();
-        selectedPiece = null;
-
-        if (gameModeSelect.value === 'ai' && currentPlayer === 'black') {
-          setTimeout(makeAiMove, 500); // Simple delay for AI move
-        }
-      } else if (event.target.classList.contains('piece') && event.target.parentNode === targetSquare) {
-        // If clicked on another piece, select it
-        selectPiece(event);
-      } else {
-        removeHighlight();
-        selectedPiece = null;
-      }
-    }
-
-    function getPossibleMoves(row, col, piece) {
-      const moves = [];
-      const isWhite = piece === piece.toUpperCase();
-      const direction = isWhite ? -1 : 1;
-
-      switch (piece.toLowerCase()) {
-        case 'p': // Pawn
-          const startRow = isWhite ? 6 : 1;
-          const enPassantRow = isWhite ? 3 : 4;
-          const enPassantDirection = [[0, -1], [0, 1]];
-
-          // Forward movement
-          if (board[row + direction]?.[col] === '') {
-            moves.push({ row: row + direction, col });
-            if (row === startRow && board[row + 2 * direction]?.[col] === '') {
-              moves.push({ row: row + 2 * direction, col });
-            }
-          }
-
-          // Capture diagonally
-          if (board[row + direction]?.[col + 1] && isOpponent(piece, board[row + direction][col + 1])) {
-            moves.push({ row: row + direction, col: col + 1 });
-          }
-          if (board[row + direction]?.[col - 1] && isOpponent(piece, board[row + direction][col - 1])) {
-            moves.push({ row: row + direction, col: col - 1 });
-          }
-          break;
-
-        case 'r': // Rook
-          const rookDirections = [[0, 1], [0, -1], [1, 0], [-1, 0]];
-          for (const [dr, dc] of rookDirections) {
-            for (let i = 1; ; i++) {
-              const newRow = row + dr * i;
-              const newCol = col + dc * i;
-              if (newRow < 0 || newRow > 7 || newCol < 0 || newCol > 7) break;
-              moves.push({ row: newRow, col: newCol });
-              if (board[newRow][newCol] !== '') {
-                if (isOpponent(piece, board[newRow][newCol])) {
-                  break; // Can capture, but cannot move further
-                } else {
-                  break; // Own piece, cannot move further
-                }
-              }
-            }
-          }
-          break;
-
-        case 'n': // Knight
-          const knightMoves = [[-2, -1], [-2, 1], [-1, -2], [-1, 2], [1, -2], [1, 2], [2, -1], [2, 1]];
-          for (const [dr, dc] of knightMoves) {
-            const newRow = row + dr;
-            const newCol = col + dc;
-            if (newRow >= 0 && newRow <= 7 && newCol >= 0 && newCol <= 7 &&
-                (board[newRow][newCol] === '' || isOpponent(piece, board[newRow][newCol]))) {
-              moves.push({ row: newRow, col: newCol });
-            }
-          }
-          break;
-
-        case 'b': // Bishop
-          const bishopDirections = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
-          for (const [dr, dc] of bishopDirections) {
-            for (let i = 1; ; i++) {
-              const newRow = row + dr * i;
-              const newCol = col + dc * i;
-              if (newRow < 0 || newRow > 7 || newCol < 0 || newCol > 7) break;
-              moves.push({ row: newRow, col: newCol });
-              if (board[newRow][newCol] !== '') {
-                if (isOpponent(piece, board[newRow][newCol])) {
-                  break; // Can capture, but cannot move further
-                } else {
-                  break; // Own piece, cannot move further
-                }
-              }
-            }
-          }
-          break;
-
-        case 'q': // Queen (Rook + Bishop moves)
-          const queenDirections = [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]];
-          for (const [dr, dc] of queenDirections) {
-            for (let i = 1; ; i++) {
-              const newRow = row + dr * i;
-              const newCol = col + dc * i;
-              if (newRow < 0 || newRow > 7 || newCol < 0 || newCol > 7) break;
-              moves.push({ row: newRow, col: newCol });
-              if (board[newRow][newCol] !== '') {
-                if (isOpponent(piece, board[newRow][newCol])) {
-                  break; // Can capture, but cannot move further
-                } else {
-                  break; // Own piece, cannot move further
-                }
-              }
-            }
-          }
-          break;
-
-        case 'k': // King
-          const kingMoves = [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]];
-          for (const [dr, dc] of kingMoves) {
-            const newRow = row + dr;
-            const newCol = col + dc;
-            if (newRow >= 0 && newRow <= 7 && newCol >= 0 && newCol <= 7 &&
-                (board[newRow][newCol] === '' || isOpponent(piece, board[newRow][newCol]))) {
-              moves.push({ row: newRow, col: newCol });
-            }
-          }
-          break;
-      }
-      return moves;
-    }
-
-    function isOpponent(piece1, piece2) {
-      const isWhite1 = piece1 === piece1.toUpperCase();
-      const isWhite2 = piece2 === piece2.toUpperCase();
-      return isWhite1 !== isWhite2;
-    }
-
-    function switchPlayer() {
-      currentPlayer = currentPlayer === 'white' ? 'black' : 'white';
-      playerTurnElement.textContent = `Turn: ${currentPlayer.charAt(0).toUpperCase() + currentPlayer.slice(1)}`;
-    }
-
-    function startTimer() {
-      startTime = Date.now();
-      timerInterval = setInterval(() => {
-        const elapsedTime = Math.floor((Date.now() - startTime) / 1000);
-        const minutes = Math.floor(elapsedTime / 60).toString().padStart(2, '0');
-        const seconds = (elapsedTime % 60).toString().padStart(2, '0');
-        timerElement.textContent = `Time: ${minutes}:${seconds}`;
-      }, 1000);
-    }
-
-    function stopTimer() {
-      clearInterval(timerInterval);
-    }
-
-    function resetGame() {
-      board = [
-        ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
-        ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
-        ['', '', '', '', '', '', '', ''],
-        ['', '', '', '', '', '', '', ''],
-        ['', '', '', '', '', '', '', ''],
-        ['', '', '', '', '', '', '', ''],
-        ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
-        ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R']
-      ];
-      currentPlayer = 'white';
-      selectedPiece = null;
-      possibleMoves = [];
-      stopTimer();
-      timerElement.textContent = 'Time: 00:00';
-      startTimer();
-      playerTurnElement.textContent = 'Turn: White';
-      generateBoard();
-    }
-
-    function makeAiMove() {
-      // Very basic AI: Find a random valid move for black
-      const blackPieces = [];
-      for (let i = 0; i < 8; i++) {
-        for (let j = 0; j < 8; j++) {
-          if (board[i][j] && board[i][j] === board[i][j].toLowerCase()) {
-            blackPieces.push({ row: i, col: j, piece: board[i][j] });
-          }
-        }
-      }
-
-      if (blackPieces.length > 0) {
-        const randomPiece = blackPieces[Math.floor(Math.random() * blackPieces.length)];
-        const possibleAiMoves = getPossibleMoves(randomPiece.row, randomPiece.col, randomPiece.piece);
-
-        if (possibleAiMoves.length > 0) {
-          const randomMove = possibleAiMoves[Math.floor(Math.random() * possibleAiMoves.length)];
-          board[randomMove.row][randomMove.col] = randomPiece.piece;
-          board[randomPiece.row][randomPiece.col] = '';
-          generateBoard();
-          switchPlayer();
-        }
-      }
-    }
-
-    resetButton.addEventListener('click', resetGame);
-    gameModeSelect.addEventListener('change', resetGame); // Reset when game mode changes
-
-    startTimer();
+    currentPlayer = 'white';
+    selectedPiece = null;
+    possibleMoves = [];
     generateBoard();
-  </script>
+  }
+
+  // Initialize
+  generateBoard();
+
+</script>
 </body>
 </html>
