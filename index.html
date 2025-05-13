@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Nerd Ass Game (Chess)</title>
+<title>Nigger Chess</title>
 <style>
   body {
     font-family: sans-serif;
@@ -115,7 +115,7 @@
 <body class="light-mode">
 
 <div class="container">
-  <h1>Nerd Chess</h1>
+  <h1>Nigger Chess</h1>
 
   <div class="controls">
     <button id="rulesBtn">Show Rules</button>
@@ -496,78 +496,5 @@
   generateBoard();
 
 </script>
-
-function generateBoard() {
-  boardElement.innerHTML = '';
-  for (let i = 0; i < 8; i++) {
-    for (let j = 0; j < 8; j++) {
-      const square = document.createElement('div');
-      square.className = 'square ' + ((i + j) % 2 === 0 ? 'white' : 'black');
-      square.dataset.row = i;
-      square.dataset.col = j;
-
-      // Add dragover & drop support
-      square.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        square.classList.add('possible-move');
-      });
-      square.addEventListener('dragleave', () => {
-        square.classList.remove('possible-move');
-      });
-      square.addEventListener('drop', (e) => {
-        e.preventDefault();
-        const from = JSON.parse(e.dataTransfer.getData("text/plain"));
-        handleDrop(from, { row: i, col: j });
-      });
-
-      const piece = board[i][j];
-      if (piece) {
-        const pieceDiv = document.createElement('div');
-        pieceDiv.className = 'piece';
-        pieceDiv.textContent = getPieceUnicode(piece);
-        pieceDiv.dataset.piece = piece;
-
-        if ((currentPlayer === 'white' && piece === piece.toUpperCase()) ||
-            (currentPlayer === 'black' && piece === piece.toLowerCase())) {
-          pieceDiv.setAttribute("draggable", true);
-          pieceDiv.addEventListener("dragstart", (e) => {
-            selectedPiece = { row: i, col: j, piece, element: pieceDiv };
-            e.dataTransfer.setData("text/plain", JSON.stringify({ row: i, col: j }));
-            highlightPossibleMoves(i, j, piece);
-          });
-        }
-
-        pieceDiv.addEventListener('mousedown', (e) => {
-          e.stopPropagation();
-          selectPiece(e, i, j, piece, pieceDiv);
-        });
-
-        square.appendChild(pieceDiv);
-      }
-
-      square.addEventListener('click', () => handleSquareClick(i, j));
-      boardElement.appendChild(square);
-    }
-  }
-}
-
-// Handle drop event
-function handleDrop(from, to) {
-  const piece = board[from.row][from.col];
-  const validMoves = getPossibleMoves(from.row, from.col, piece);
-  const isValid = validMoves.some(m => m.row === to.row && m.col === to.col);
-
-  if (isValid) {
-    board[to.row][to.col] = piece;
-    board[from.row][from.col] = '';
-    switchPlayer();
-    clearHighlights();
-    selectedPiece = null;
-    generateBoard();
-  } else {
-    clearHighlights();
-  }
-}
-
 </body>
 </html>
